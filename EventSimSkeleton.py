@@ -46,7 +46,7 @@ class Ev:
 
     def __init__(self, t, work, args=(), prio=255):
         self.t = t
-        self.n = Ev.counter
+        #self.n = Ev.counter
         self.work = work
         self.args = args
         self.prio = prio
@@ -67,20 +67,22 @@ class Ev:
 
 class EvQueue:
     # please implement here
-    ereignisliste = []
+    q = []
     time = 0
+    evCount = 0
 
     def pop(self) -> Ev:
-        event = heapq.heappop(self.ereignisliste)
+        event = heapq.heappop(self.q)
         EvQueue.time = event.t
+        self.evCount += 1
         event.work()
         return event
 
     def push(self, event):
-        heapq.heappush(self.ereignisliste, event)
+        heapq.heappush(self.q, event)
 
     def start(self):
-        while len(self.ereignisliste) != 0:
+        while len(self.q) != 0:
             self.pop()
 
 
@@ -93,20 +95,20 @@ class Station:
     # please implement here
     def __init__(self, t, name):
         self.name = name
-        self.t = t
-        self.list = []
+        self.delay_per_item = t
+        self.buffer = []
 
     def queue(self, kunde):
-        if len(self.list) == 0:
+        if len(self.buffer) == 0:
             evQ.push(
-                Ev(EvQueue.time + self.t * kunde.stations[kunde.station][0], kunde.verlassen_station, kunde, prio=1))
-        self.list.append(kunde)
+                Ev(EvQueue.time + self.delay_per_item * kunde.stations[kunde.station][0], kunde.verlassen_station, kunde, prio=1))
+        self.buffer.append(kunde)
 
     def finish(self):
-        del self.list[0]
-        if len(self.list) != 0:
-            evQ.push(Ev(EvQueue.time + self.t * self.list[0].stations[self.list[0].station][2],
-                        self.list[0].verlassen_station, self.list[0], prio=1))
+        del self.buffer[0]
+        if len(self.buffer) != 0:
+            evQ.push(Ev(EvQueue.time + self.delay_per_item * self.buffer[0].stations[self.buffer[0].station][2],
+                        self.buffer[0].verlassen_station, self.buffer[0], prio=1))
 
 
 # class consists of
@@ -126,22 +128,36 @@ class Customer():
         self.station = 0
         self.name = name
         self.t = t
+        self.has_been_dropped = False
+        self.start_time = EvQueue.time
 
     def run(self):
         evQ.push(Ev(evQ.time + self.stations[self.station][0], self.ankunft_station, self, 3))
 
     def ankunft_station(self):
-        if len(self.stations[self.station][1].list) <= self.stations[self.station][3]:
+        if len(self.stations[self.station][1].buffer) <= self.stations[self.station][3]:
             self.stations[self.station][1].queue(self)
         else:
             # drop customer
-            self.verlassen_station()
+            Customer.dropped.update({self.stations[self.station][1].name: self.dropped[self.stations[self.station][1].name] + 1})
+            self.has_been_dropped = True
+            self.verlassen_station(False)
         # evQ.push(Ev(evQ.simulationszeit + self.stations[0][0], self.stations[0][1].queue, self, 2))
 
-    def verlassen_station(self):
+    def verlassen_station(self, served = True):
+        if served:
+            self.stations[self.station][1].finish()
         if len(self.stations) - 1 > self.station:
             self.station += 1
             evQ.push(Ev(evQ.time + self.stations[self.station][0], self.ankunft_station, self, 3))
+            Customer.served.update(
+                {self.stations[self.station][1].name: self.served[self.stations[self.station][1].name] + 1})
+        else:
+            Customer.count += 1
+            Customer.duration += EvQueue.time - self.start_time
+            if not self.has_been_dropped:
+                Customer.complete += 1
+                Customer.duration_cond_complete += EvQueue.time - self.start_time
 
 
 def startCustomers(einkaufsliste, name, sT, dT, mT):
@@ -174,8 +190,9 @@ startCustomers(einkaufsliste1, 'A', 0, 200, 30 * 60 + 1)
 startCustomers(einkaufsliste2, 'B', 1, 60, 30 * 60 + 1)
 evQ.start()
 my_print('Simulationsende: %is' % EvQueue.time)
-my_print('Anzahl Kunden: %i' % (Customer.count
-                                ))
+print(Customer.dropped)
+print(Customer.served)
+my_print('Anzahl Kunden: %i' % Customer.count)
 my_print('Anzahl vollständige Einkäufe %i' % Customer.complete)
 x = Customer.duration / Customer.count
 my_print(str('Mittlere Einkaufsdauer %.2fs' % x))
