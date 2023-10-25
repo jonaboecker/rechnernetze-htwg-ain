@@ -8,6 +8,7 @@ f = open("supermarkt.txt", "w")
 fc = open("supermarkt_customer.txt", "w")
 fs = open("supermarkt_station.txt", "w")
 
+t0 = time.time()
 
 # print on console and into supermarket log
 def my_print(msg):
@@ -54,26 +55,27 @@ class Station(threading.Thread):
         self.buffer = []
         self._lock = threading.Lock()
         self.current_customer = None
-        self.CustomerWaitingEv = threading.Event
+        self.CustomerWaitingEv = threading.Event()
 
-    def run(self):
-        while time.time() - t0 < runtime:
+    def run(self, t0, runtime):
+        while time.time() - t0 <= runtime:
             if len(self.buffer) != 0:
                 self.current_customer = self.buffer[0]
                 del self.buffer[0]
                 my_print2(self.name, 'bedient', self.current_customer.name)
-                sleep(self.delay_per_item * self.current_customer.stations[self.current_customer.station][2])
+                sleep(self.delay_per_item * self.current_customer.stations[self.current_customer.station][2]/60)
                 my_print2(self.name, 'verabschiedet', self.current_customer.name)
-                self.current_customer.cond.notify()
+                self.current_customer.cond.set()
             else:
                 #self.CustomerWaitingEv.clear()
                 self.CustomerWaitingEv.wait() #=0
+        print(self.name + 'finished')
 
     def queue(self, kunde):
-        my_print2(self.name, 'stellt an', self.current_customer.name)
+        my_print2(self.name, 'stellt an', kunde.name)
         self.buffer.append(kunde)
-        if not self.CustomerWaitingEv.is_set():
-            self.CustomerWaitingEv.set() #=1
+        #if not self.CustomerWaitingEv.is_set(self.CustomerWaitingEv):
+        self.CustomerWaitingEv.set() #=1
 
     # def queue(self, kunde):
     #     self._lock.acquire()
@@ -109,14 +111,14 @@ class Customer(threading.Thread):
         self.name = name
         self.has_been_dropped = False
         self.start_time = time.time()
-        self.cond = threading.Condition()
+        self.cond = threading.Event()
 
     def run(self):
         for station in self.stations:
             my_print1(self.name, station[1].name, 'walks')
-            sleep(station[0])
+            sleep(station[0]/60)
             my_print1(self.name, station[1].name, 'arrives')
-            station[1].queue()
+            station[1].queue(kunde=self)
             self.cond.wait()
             my_print1(self.name, station[1].name, 'finished')
         my_print1(self.name, 'None', 'finished')
@@ -128,7 +130,7 @@ def startCustomers(einkaufsliste, name, sT, dT):
         kunde = Customer(list(einkaufsliste), name + str(i), t)
         threading.Thread(target=kunde.run).start()
         i += 1
-        sleep(dT)
+        sleep(dT/60)
         t = time.time() -t0
 
 
@@ -137,14 +139,6 @@ baecker = Station(10, 'Bäcker')
 metzger = Station(30, 'Metzger')
 kaese = Station(60, 'Käse')
 kasse = Station(5, 'Kasse')
-thread_baecker = threading.Thread(target=baecker.run)
-thread_metzger = threading.Thread(target=metzger.run)
-thread_kaese = threading.Thread(target=kaese.run)
-thread_kasse = threading.Thread(target=kasse.run)
-thread_baecker.start()
-thread_metzger.start()
-thread_kaese.start()
-thread_kasse.start()
 Customer.served['Bäcker'] = 0
 Customer.served['Metzger'] = 0
 Customer.served['Käse'] = 0
@@ -155,8 +149,16 @@ Customer.dropped['Käse'] = 0
 Customer.dropped['Kasse'] = 0
 einkaufsliste1 = [(10, baecker, 10, 10), (30, metzger, 5, 10), (45, kaese, 3, 5), (60, kasse, 30, 20)]
 einkaufsliste2 = [(30, metzger, 2, 5), (30, kasse, 3, 20), (20, baecker, 3, 20)]
-runtime = 30 * 60
+runtime = 30 * 60 / 60
 t0 = time.time()
+thread_baecker = threading.Thread(target=baecker.run, args=(t0, runtime))
+thread_metzger = threading.Thread(target=metzger.run, args=(t0, runtime))
+thread_kaese = threading.Thread(target=kaese.run, args=(t0, runtime))
+thread_kasse = threading.Thread(target=kasse.run, args=(t0, runtime))
+thread_baecker.start()
+thread_metzger.start()
+thread_kaese.start()
+thread_kasse.start()
 thread_K1 = threading.Thread(target=startCustomers, args=(einkaufsliste1, 'A', 0, 200))
 thread_K2 = threading.Thread(target=startCustomers, args=(einkaufsliste2, 'B', 1, 60))
 thread_K1.start()
