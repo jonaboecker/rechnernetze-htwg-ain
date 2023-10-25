@@ -135,7 +135,7 @@ class Customer():
         evQ.push(Ev(evQ.time + self.stations[self.station][0], self.ankunft_station, self, 3))
 
     def ankunft_station(self):
-        if len(self.stations[self.station][1].buffer) <= self.stations[self.station][3]:
+        if len(self.stations[self.station][1].buffer) < self.stations[self.station][3]:
             self.stations[self.station][1].queue(self)
         else:
             # drop customer

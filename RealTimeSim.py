@@ -64,6 +64,8 @@ class Station(threading.Thread):
                 del self.buffer[0]
                 my_print2(self.name, 'bedient', self.current_customer.name)
                 sleep(self.delay_per_item * self.current_customer.stations[self.current_customer.station][2]/60)
+                Customer.served.update(
+                    {self.current_customer.stations[self.current_customer.station][1].name: self.current_customer.dropped[self.current_customer.stations[self.current_customer.station][1].name] + 1})
                 my_print2(self.name, 'verabschiedet', self.current_customer.name)
                 self.current_customer.cond.set()
             else:
@@ -72,10 +74,17 @@ class Station(threading.Thread):
         print(self.name + 'finished')
 
     def queue(self, kunde):
-        my_print2(self.name, 'stellt an', kunde.name)
-        self.buffer.append(kunde)
-        #if not self.CustomerWaitingEv.is_set(self.CustomerWaitingEv):
-        self.CustomerWaitingEv.set() #=1
+        if len(self.buffer) >= kunde.stations[kunde.station][3]:
+            my_print2(self.name, 'verjagt', kunde.name)
+            kunde.has_been_dropped = True
+            Customer.dropped.update({kunde.stations[kunde.station][1].name: kunde.dropped[kunde.stations[kunde.station][1].name] + 1})
+            kunde.cond.set()
+
+        else:
+            my_print2(self.name, 'stellt an', kunde.name)
+            self.buffer.append(kunde)
+            #if not self.CustomerWaitingEv.is_set(self.CustomerWaitingEv):
+            self.CustomerWaitingEv.set() #=1
 
     # def queue(self, kunde):
     #     self._lock.acquire()
@@ -121,6 +130,11 @@ class Customer(threading.Thread):
             station[1].queue(kunde=self)
             self.cond.wait()
             my_print1(self.name, station[1].name, 'finished')
+        if not self.has_been_dropped:
+            Customer.complete += 1
+            Customer.duration_cond_complete += time.time() - self.start_time
+        Customer.count += 1
+        Customer.duration += time.time() - self.start_time
         my_print1(self.name, 'None', 'finished')
 
 def startCustomers(einkaufsliste, name, sT, dT):
