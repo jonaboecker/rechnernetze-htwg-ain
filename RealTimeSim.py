@@ -7,8 +7,11 @@ from time import sleep
 f = open("supermarkt.txt", "w")
 fc = open("supermarkt_customer.txt", "w")
 fs = open("supermarkt_station.txt", "w")
+flog = open("log.txt", "w")
 
 t0 = time.time()
+dic_served_lock = threading.Lock()
+dic_dropped_lock = threading.Lock()
 
 # print on console and into supermarket log
 def my_print(msg):
@@ -32,6 +35,10 @@ def my_print2(s, msg, name):
     t = time.time() - t0
     # print(str(round(t,4))+':'+s+' '+msg)
     fs.write(str(round(t, 4)) + ':' + s + ' ' + msg + ' ' + name + '\n')
+
+
+def log(msg):
+    flog.write(msg + '\n')
 
 
 # prio:
@@ -64,20 +71,25 @@ class Station(threading.Thread):
                 del self.buffer[0]
                 my_print2(self.name, 'bedient', self.current_customer.name)
                 sleep(self.delay_per_item * self.current_customer.stations[self.current_customer.station][2]/60)
-                Customer.served.update(
-                    {self.current_customer.stations[self.current_customer.station][1].name: self.current_customer.dropped[self.current_customer.stations[self.current_customer.station][1].name] + 1})
+                #Customer.served.update(
+                #    {self.current_customer.stations[self.current_customer.station][1].name: Customer.dropped[self.current_customer.stations[self.current_customer.station][1].name] + 1})
+                update_served(self, station_name=self.current_customer.stations[self.current_customer.station][1].name)
+                self.current_customer.station += 1
                 my_print2(self.name, 'verabschiedet', self.current_customer.name)
                 self.current_customer.cond.set()
             else:
                 #self.CustomerWaitingEv.clear()
                 self.CustomerWaitingEv.wait() #=0
-        print(self.name + 'finished')
+        t = time.time() - t0
+        print(str(round(t, 4)) + ':' + self.name + 'finished')
 
     def queue(self, kunde):
         if len(self.buffer) >= kunde.stations[kunde.station][3]:
             my_print2(self.name, 'verjagt', kunde.name)
             kunde.has_been_dropped = True
-            Customer.dropped.update({kunde.stations[kunde.station][1].name: kunde.dropped[kunde.stations[kunde.station][1].name] + 1})
+            #Customer.dropped.update({kunde.stations[kunde.station][1].name: Customer.dropped[kunde.stations[kunde.station][1].name] + 1})
+            update_dropped(self, station_name=kunde.stations[kunde.station][1].name)
+            kunde.station += 1
             kunde.cond.set()
 
         else:
@@ -137,6 +149,7 @@ class Customer(threading.Thread):
         Customer.duration += time.time() - self.start_time
         my_print1(self.name, 'None', 'finished')
 
+
 def startCustomers(einkaufsliste, name, sT, dT):
     i = 1
     t = sT
@@ -146,6 +159,19 @@ def startCustomers(einkaufsliste, name, sT, dT):
         i += 1
         sleep(dT/60)
         t = time.time() -t0
+
+
+def update_served(self, station_name):
+    dic_served_lock.acquire()
+    log("called with: " + station_name)
+    Customer.served.update({station_name: Customer.served[station_name] + 1})
+    dic_served_lock.release()
+
+
+def update_dropped(self, station_name):
+    dic_dropped_lock.acquire()
+    Customer.dropped.update({station_name: Customer.dropped[station_name] + 1})
+    dic_dropped_lock.release()
 
 
 #evQ = EvQueue()
@@ -165,10 +191,10 @@ einkaufsliste1 = [(10, baecker, 10, 10), (30, metzger, 5, 10), (45, kaese, 3, 5)
 einkaufsliste2 = [(30, metzger, 2, 5), (30, kasse, 3, 20), (20, baecker, 3, 20)]
 runtime = 30 * 60 / 60
 t0 = time.time()
-thread_baecker = threading.Thread(target=baecker.run, args=(t0, runtime))
-thread_metzger = threading.Thread(target=metzger.run, args=(t0, runtime))
-thread_kaese = threading.Thread(target=kaese.run, args=(t0, runtime))
-thread_kasse = threading.Thread(target=kasse.run, args=(t0, runtime))
+thread_baecker = threading.Thread(target=baecker.run, args=(t0, runtime + 10))
+thread_metzger = threading.Thread(target=metzger.run, args=(t0, runtime + 10))
+thread_kaese = threading.Thread(target=kaese.run, args=(t0, runtime + 10))
+thread_kasse = threading.Thread(target=kasse.run, args=(t0, runtime + 10))
 thread_baecker.start()
 thread_metzger.start()
 thread_kaese.start()
@@ -182,7 +208,8 @@ thread_metzger.join()
 thread_kaese.join()
 thread_kasse.join()
 t1 = time.time()
-my_print('Simulationsende: %is' % t1)
+flog.close()
+my_print('Simulationsende: %is' % (t1 - t0))
 print(Customer.dropped)
 print(Customer.served)
 my_print('Anzahl Kunden: %i' % Customer.count)
