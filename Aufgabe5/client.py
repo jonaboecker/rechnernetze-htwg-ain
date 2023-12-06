@@ -33,4 +33,4 @@ if __name__ == "__main__":
         if not user_input.isdigit():
             break
         numbers.append(int(user_input))
-    send_request(123,op, numbers)
+    send_request(123, op, numbers)

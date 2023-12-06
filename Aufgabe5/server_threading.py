@@ -1,5 +1,7 @@
 import socket
 import struct
+import threading
+
 
 def handle_request(client_socket):
     request_data = client_socket.recv(1024)
@@ -42,18 +44,21 @@ def handle_request(client_socket):
     client_socket.send(response)
     client_socket.close()
 
+
 def main():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('localhost', 8888))
-    # server_socket.bind(('192.168.217.7', 8888))
     server_socket.listen(5)
     print("Server gestartet. Warte auf Verbindung...")
 
     while True:
         client_socket, addr = server_socket.accept()
         print(f"Verbunden mit {addr}")
-        handle_request(client_socket)
-        client_socket.close()
+
+        # Erstellen eines Threads für jeden Client
+        client_thread = threading.Thread(target=handle_request, args=(client_socket,))
+        client_thread.start()
+
 
 if __name__ == "__main__":
     main()
