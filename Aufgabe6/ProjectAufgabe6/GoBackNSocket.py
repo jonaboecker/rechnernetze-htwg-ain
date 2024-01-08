@@ -1,46 +1,72 @@
+import threading
 import time
 import random
 from threading import Thread
 from lossy_udp_socket import lossy_udp_socket
 
-nBytes = 1500
+nBytes = 500
 window = 4
 global packetNo
 global threads
 global sendPackets
 global receivedPackets
 global ackPackets
-class GoBackNSocket():
+global timer_expired
+global message_complete
+
+
+class GoBackNSocket:
 
     def __init__(self, port, address):
         self.port = port
         self.address = address
 
-    def receive(self, packet):
+    @staticmethod
+    def receive(packet):
         global receivedPackets
         global ackPackets
+        global message_complete
         string = packet.decode()
         info = string.split(':')
-        if len(info) > 3:
-            receivedPackets.append([])
+        print(info)
+
+        if str(info[0]) == 'ack':  # ack message
+            ack_number = ackPackets.get(info[1])
+            packet_number = int(info[2])
+            if ack_number is not None and packet_number is not None:
+                if ack_number == -1 or ack_number < packet_number:
+                    ackPackets.update({info[1]: packet_number})
+                    print('ack:' + info[1] + ':' + info[2])
+            return
+
+        # send ack
+        if int(info[1]) == 0:
+            lus1.send(('ack:' + info[0] + ':' + info[1]).encode())
+        elif ackPackets.__contains__(info[0]):
+            if int(ackPackets.get(info[0])) == (int(info[1]) - 1):
+                lus1.send(('ack:' + info[0] + ':' + info[1]).encode())
+            else:
+                return
+        else:
+            return
+
+        if len(info) > 3:   # first message
+            if len(receivedPackets) <= int(info[0]):
+                receivedPackets.append([])
             receivedPackets[int(info[0])].append('')
             receivedPackets[int(info[0])].append('')
             receivedPackets[int(info[0])][int(info[1])] = int(info[2])
             receivedPackets[int(info[0])][int(info[1]) + 1] = info[3]
             for x in range(window):
                 receivedPackets[int(info[0])].append('')
-        elif str(info[0]) == 'ack':
-                print('ack:' + info[1] + ':' + info[2])
-                if ackPackets.keys().__contains__(int(info[1])) and (int(ackPackets.get(info[1])) == -1 or int(ackPackets.get(info[1])) < int(info[2])):
-                    #ackPackets.pop(info[1])
-                    ackPackets.update({info[1]: info[2]})
-                    print('ack')
-                return
-        else:
-            receivedPackets[int(info[0])].append('')
+        else:       # follow-up message
+            if len(receivedPackets) <= int(info[0]):
+                receivedPackets.append([])
+            while len(receivedPackets[int(info[0])]) <= int(info[1]) + 1:
+                receivedPackets[int(info[0])].append('')
             receivedPackets[int(info[0])][int(info[1]) + 1] = info[2]
-        #print(string)
-        #print(receivedPackets)
+        # print(string)
+        # print(receivedPackets)
         bytes = 0
         packet = ''
         for x in receivedPackets[int(info[0])]:
@@ -50,15 +76,9 @@ class GoBackNSocket():
 
         if receivedPackets[int(info[0])][0] == bytes:
             print(packet)
+            message_complete[int(info[0])] = True
         else:
             print(str(bytes) + ' out of ' + str(receivedPackets[int(info[0])][0]))
-
-        #send ack
-        if int(info[1]) == 0:
-            lus1.send(('ack:' + info[0] + ':' + info[1]).encode())
-        elif ackPackets.__contains__(info[0]):
-            if int(ackPackets.get(info[0])) == (int(info[1]) - 1):
-                lus1.send(('ack:' + info[0] + ':' + info[1]).encode())
 
     def send(self, lus, msg):
         global packetNo
@@ -66,35 +86,62 @@ class GoBackNSocket():
         global threads
         msg = (str(len(msg))+':').encode() + msg
         threads.append('')
-        threads[packetNo] = Thread(target=GoBackNSocket.sendThread(lus, msg, packetNo))
+        threads[packetNo] = Thread(target=GoBackNSocket.send_thread(self, lus, msg, packetNo))
         threads[packetNo].start()
-        #sendPackets.append('')
-        #sendPackets[packetNo] = msg
         packetNo += 1
 
-    def sendThread(lus, msg, id):
-        ackPackets.update({id: -1})
+    def send_thread(self, lus, msg, id):
+        global message_complete
+        message_complete.append('')
+        message_complete[id] = False
+        ackPackets.update({str(id): -1})
         i = 0
-        if len(msg) > nBytes:
+        global timer_expired
+        timer_expired = False
+        if len(msg) > 0:
             ident = (str(id) + ':' + str(i) + ':').encode()
             start = 0
             stop = nBytes - len(ident)
-            dataArr = []
+            data_arr = []
             for x in range(int(len(msg)/nBytes) + 1):
                 data = ident + msg[start:stop]
-                dataArr.append(data)
+                data_arr.append(data)
                 #lus.send(data)
                 i += 1
-                ident = (str(id) + ':' + str(i)+ ':').encode()
+                ident = (str(id) + ':' + str(i) + ':').encode()
                 start = stop
                 stop = stop + nBytes - len(ident)
             j = 0
-            for x in dataArr:
-                while (j - (ackPackets.get(id) + 1)) >= window:
-                    pass
-                lus.send(x)
-                j = j + 1
-                time.sleep(1)
+            while message_complete[id] is False:
+                if timer_expired is True:
+                    timer_expired = False
+                    j = int(ackPackets.get(str(id))) + 1
+                    self.timer(self, 2)
+                    continue
+                while len(data_arr) > j:
+                    while (j - (int(ackPackets.get(str(id))) + 1)) >= window and timer_expired is False:
+                        pass
+                    if timer_expired is True:
+                        timer_expired = False
+                        j = int(ackPackets.get(str(id))) + 1
+                        self.timer(self, 2)
+                        continue
+
+                    lus.send(data_arr[j])
+                    self.timer(self, 2)
+                    j += 1
+                    time.sleep(0.1)
+        # else:
+
+
+    @staticmethod
+    def timer(self, s):
+        threading.Timer(s, self.timer_trigger).start()
+
+    @staticmethod
+    def timer_trigger():
+        global timer_expired
+        timer_expired = True
 
     def stop(lus):
         lus.stop()
@@ -110,10 +157,11 @@ if __name__ == '__main__':
     sendPackets = []
     receivedPackets = []
     ackPackets = {}
+    message_complete = []
     gbns1 = GoBackNSocket(port1, address1)
     gbns2 = GoBackNSocket(port2, address2)
-    lus1 = lossy_udp_socket(gbns1, port1, address1, 0)
-    lus2 = lossy_udp_socket(gbns2, port2, address2, 0)
+    lus1 = lossy_udp_socket(gbns1, port1, address1, 0.2)
+    lus2 = lossy_udp_socket(gbns2, port2, address2, 0.2)
 
     print('set up receiver')
     t1 = Thread(target=lus2.recv)
@@ -127,9 +175,9 @@ if __name__ == '__main__':
     with open('test.txt', 'r') as file:
         msg = file.read()
     gbns1.send(lus1, msg.encode())
+    gbns1.send(lus1, 'hallo'.encode())
     #GoBackNSocket.send(lus1, msg.encode())
 
-    time.sleep(1)
     GoBackNSocket.stop(lus1)
     GoBackNSocket.stop(lus2)
     t1.join()
