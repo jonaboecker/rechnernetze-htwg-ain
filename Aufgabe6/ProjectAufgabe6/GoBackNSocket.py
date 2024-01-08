@@ -1,6 +1,5 @@
 import threading
 import time
-import random
 from threading import Thread
 from lossy_udp_socket import lossy_udp_socket
 
@@ -70,7 +69,7 @@ class GoBackNSocket:
         bytes = 0
         packet = ''
         for x in receivedPackets[int(info[0])]:
-            if type(x) != int:
+            if type(x) is not int:
                 bytes += len(x)
                 packet += x
 
@@ -106,7 +105,7 @@ class GoBackNSocket:
             for x in range(int(len(msg)/nBytes) + 1):
                 data = ident + msg[start:stop]
                 data_arr.append(data)
-                #lus.send(data)
+                # lus.send(data)
                 i += 1
                 ident = (str(id) + ':' + str(i) + ':').encode()
                 start = stop
@@ -128,11 +127,10 @@ class GoBackNSocket:
                         continue
 
                     lus.send(data_arr[j])
-                    self.timer(self, 2)
+                    self.timer(self, 1)
                     j += 1
-                    time.sleep(0.1)
+                    time.sleep(0.01)
         # else:
-
 
     @staticmethod
     def timer(self, s):
@@ -143,6 +141,7 @@ class GoBackNSocket:
         global timer_expired
         timer_expired = True
 
+    @staticmethod
     def stop(lus):
         lus.stop()
 
@@ -170,13 +169,11 @@ if __name__ == '__main__':
     t2 = Thread(target=lus1.recv)
     t2.start()
 
-    #with open('Kafka_Der_Prozess.txt', 'r') as file:
-    #    msg = file.read()
     with open('test.txt', 'r') as file:
         msg = file.read()
     gbns1.send(lus1, msg.encode())
     gbns1.send(lus1, 'hallo'.encode())
-    #GoBackNSocket.send(lus1, msg.encode())
+    # GoBackNSocket.send(lus1, msg.encode())
 
     GoBackNSocket.stop(lus1)
     GoBackNSocket.stop(lus2)
