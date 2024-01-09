@@ -7,8 +7,6 @@ nBytes = 500
 window = 4
 global packetNo
 global threads
-global sendPackets
-global receivedPackets
 global ackPackets
 global timer_expired
 global message_complete
@@ -42,7 +40,6 @@ class GoBackNSocket:
 
     def send(self, lus, msg):
         global packetNo
-        global sendPackets
         global threads
         msg = (str(len(msg))+':').encode() + msg
         threads.append('')
@@ -67,7 +64,6 @@ class GoBackNSocket:
             for x in range(int(len(msg)/nBytes) + 1):
                 data = ident + msg[start:stop]
                 data_arr.append(data)
-                # lus.send(data)
                 i += 1
                 ident = (str(id) + ':' + str(i) + ':').encode()
                 start = stop
@@ -113,7 +109,6 @@ if __name__ == '__main__':
     
     packetNo = 0
     threads = []
-    receivedPackets = []
     ackPackets = {}
     message_complete = []
 

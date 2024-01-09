@@ -1,16 +1,9 @@
-import threading
-import time
 from threading import Thread
 from lossy_udp_socket import lossy_udp_socket
 
-nBytes = 500
 window = 4
-global packetNo
-global threads
-global sendPackets
 global receivedPackets
 global ackPackets
-global timer_expired
 global message_complete
 
 
@@ -66,8 +59,6 @@ class GoBackNSocket:
             while len(receivedPackets[int(info[0])]) <= int(info[1]) + 1:
                 receivedPackets[int(info[0])].append('')
             receivedPackets[int(info[0])][int(info[1]) + 1] = info[2]
-        # print(string)
-        # print(receivedPackets)
         bytes = 0
         packet = ''
         for x in receivedPackets[int(info[0])]:
@@ -77,21 +68,9 @@ class GoBackNSocket:
 
         if receivedPackets[int(info[0])][0] == bytes:
             print(packet)
+            receivedPackets[int(info[0])] = ['']
         else:
             print(str(bytes) + ' out of ' + str(receivedPackets[int(info[0])][0]))
-
-    @staticmethod
-    def timer(self, s):
-        threading.Timer(s, self.timer_trigger).start()
-
-    @staticmethod
-    def timer_trigger():
-        global timer_expired
-        timer_expired = True
-
-    @staticmethod
-    def stop(lus):
-        lus.stop()
 
 def receiver_thread():
     t1 = Thread(target=lus1.recv)
@@ -100,9 +79,7 @@ def receiver_thread():
 if __name__ == '__main__':
     port2 = 8889
     address2 = ('127.0.0.1', 8888)
-    
-    packetNo = 0
-    threads = []
+
     receivedPackets = []
     ackPackets = {}
     message_complete = []
@@ -111,37 +88,3 @@ if __name__ == '__main__':
     lus1 = lossy_udp_socket(gbns2, port2, address2, 0.1)
 
     receiver_thread()
-
-"""if __name__ == '__main__':
-    port1 = 734
-    port2 = 9348
-    address1 = ('127.0.0.1', port1)
-    address2 = ('127.0.0.2', port2)
-    packetNo = 0
-    threads = []
-    sendPackets = []
-    receivedPackets = []
-    ackPackets = {}
-    message_complete = []
-    gbns1 = GoBackNSocket(port1, address1)
-    gbns2 = GoBackNSocket(port2, address2)
-    lus1 = lossy_udp_socket(gbns1, port1, address1, 0.2)
-    lus2 = lossy_udp_socket(gbns2, port2, address2, 0.2)
-
-    print('set up receiver')
-    t1 = Thread(target=lus2.recv)
-    t1.start()
-
-    t2 = Thread(target=lus1.recv)
-    t2.start()
-
-    with open('test.txt', 'r') as file:
-        msg = file.read()
-    gbns1.send(lus1, msg.encode())
-    gbns1.send(lus1, 'hallo'.encode())
-    # GoBackNSocket.send(lus1, msg.encode())
-
-    GoBackNSocket.stop(lus1)
-    GoBackNSocket.stop(lus2)
-    t1.join()
-    t2.join()"""
